@@ -1,7 +1,8 @@
-from PIL import Image
-import numpy as np
 import os
+import numpy as np
+from PIL import Image
 
+# --- Diccionario de Kernels (Copiado de tu código) ---
 KERNELS = {
     'Enfoque': np.array([
         [0, -1, 0],
@@ -42,12 +43,17 @@ KERNELS = {
     ])
 }
 
-
+# --- Función de Convolución Manual (Copiada de tu código) ---
 def convolve_manual_rgb(imagen_np, kernel):
     """
     Aplica una convolución 2D manual a una imagen RGB (array de NumPy).
     Itera sobre cada canal de color (R, G, B) y aplica el kernel.
     """
+    # Manejar el caso de una imagen en escala de grises
+    if imagen_np.ndim == 2:
+        # Convertir temporalmente a 3D para que el resto del código funcione
+        imagen_np = np.stack([imagen_np] * 3, axis=-1)
+
     k_h, k_w = kernel.shape
     img_h, img_w, img_c = imagen_np.shape
 
@@ -64,93 +70,117 @@ def convolve_manual_rgb(imagen_np, kernel):
                                    x - pad_w : x + pad_w + 1, 
                                    c]
                 
-                # [cite_start]Operación de convolución [cite: 212, 242]
                 valor_conv = np.sum(region * kernel)
-                
                 output_array[y, x, c] = valor_conv
     
     return output_array
 
-
-def aplicar_filtro_manual(ruta_imagen, nombre_kernel, carpeta_salida, ancho_deseado=400, alto_deseado=184):
-        
-    if nombre_kernel not in KERNELS:
-        print(f"Error: El kernel '{nombre_kernel}' no está definido.")
-        return
-
+# --- Función Principal de Procesamiento ---
+def procesar_y_guardar_imagen(ruta_original, carpeta_destino, kernel_nombre, kernel, ancho_deseado, alto_deseado):
+    """
+    Aplica la lógica completa de preprocesamiento a una sola imagen y la guarda.
+    """
     try:
-        imagen_original = Image.open(ruta_imagen)
-    except Exception as e:
-        print(f"Error: No se pudo cargar la imagen en la ruta: {ruta_imagen}")
-        print(f"Error: {e}")
-        return
+        # 1. Cargar la imagen
+        img = Image.open(ruta_original)
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
 
-    if imagen_original.mode == 'RGBA':
-        imagen_original = imagen_original.convert('RGB')
+        # 2. Corregir Orientación (¡NUEVA LÓGICA!)
+        # Si es vertical (alto > ancho), rotarla 90 grados
+        ancho, alto = img.size
+        if alto > ancho:
+            # Usamos -90 (o 270) para rotar en sentido horario, 
+            # que es lo más común para fotos verticales.
+            # 'expand=True' ajusta el tamaño del lienzo a la imagen rotada.
+            img = img.rotate(-90, resample=Image.Resampling.BICUBIC, expand=True)
+
+        # 3. Escalar al tamaño objetivo
+        # Ahora que la imagen es horizontal, la redimensionamos a 400x184
+        img_escalada = img.resize((ancho_deseado, alto_deseado), Image.Resampling.BICUBIC)
+
+        # 4. Aplicar Convolución (Kernel)
+        img_np = np.array(img_escalada)
+        img_filtrada_np = convolve_manual_rgb(img_np, kernel)
+
+        # 5. Normalizar kernels de desenfoque/gauss
+        if kernel_nombre in ['Desenfoque', 'Filtro_Gauss']:
+            kernel_sum = np.sum(kernel)
+            if kernel_sum != 0:
+                img_filtrada_np = img_filtrada_np / kernel_sum
         
-    # Tu lógica para redimensionar según la orientación
-    if(imagen_original.size[1] < imagen_original.size[0]):
-        imagen = imagen_original.resize((ancho_deseado, alto_deseado), Image.Resampling.BICUBIC)
-    else:
-        imagen = imagen_original.resize((alto_deseado, ancho_deseado), Image.Resampling.BICUBIC)
+        # 6. Recortar valores y convertir de nuevo a PIL
+        img_filtrada_np = np.clip(img_filtrada_np, 0, 255)
+        img_filtrada_pil = Image.fromarray(img_filtrada_np.astype('uint8'))
 
-    imagen_np = np.array(imagen)
-    kernel = KERNELS[nombre_kernel]
-    imagen_filtrada_np = convolve_manual_rgb(imagen_np, kernel)
+        # 7. Guardar el archivo
+        ruta_base, extension = os.path.splitext(os.path.basename(ruta_original))
+        nuevo_nombre = f"{ruta_base}_{kernel_nombre}{extension}"
+        ruta_guardado = os.path.join(carpeta_destino, nuevo_nombre)
+        
+        img_filtrada_pil.save(ruta_guardado)
+        print(f"  Guardada como: {ruta_guardado}")
 
-    if nombre_kernel in ['Desenfoque', 'Filtro_Gauss']:
-        kernel_sum = np.sum(kernel)
-        if kernel_sum != 0:
-            imagen_filtrada_np = imagen_filtrada_np / kernel_sum
-    
-    imagen_filtrada_np = np.clip(imagen_filtrada_np, 0, 255)
-    imagen_filtrada_pil = Image.fromarray(imagen_filtrada_np.astype('uint8'))
-
-    os.makedirs(carpeta_salida, exist_ok=True)
-
-    ruta_base, extension = os.path.splitext(os.path.basename(ruta_imagen))
-    nuevo_nombre_archivo = f"{ruta_base}_{nombre_kernel}{extension}"
-    ruta_guardado = os.path.join(carpeta_salida, nuevo_nombre_archivo)
-
-    try:
-        imagen_filtrada_pil.save(ruta_guardado)
-        print(f"¡Éxito! Imagen guardada como: {ruta_guardado}")
     except Exception as e:
-        print(f"Error al guardar la imagen: {e}")
-        return
+        print(f"  ERROR al procesar {ruta_original}: {e}")
 
 
+# --- Bloque Principal de Ejecución ---
 if __name__ == "__main__":
     
     CARPETA_ORIGINALES = "Originales"
+    ANCHO_OBJETIVO = 400
+    ALTO_OBJETIVO = 184
 
-    # --- 1. PREGUNTAR POR EL KERNEL ---
-    print("--- Kernels Disponibles ---")
-    print(", ".join(KERNELS.keys()))
-    
-    kernel_a_aplicar = ""
-    while kernel_a_aplicar not in KERNELS:
+    # Bucle principal para crear el dataset
+    while True:
+        print("\n--- Creador de Dataset de Preprocesamiento ---")
+        print("Kernels Disponibles:")
+        for key in KERNELS.keys():
+            print(f" - {key}")
+        print("\nEscribe 'salir' para terminar el programa.")
+        
+        # 1. Preguntar qué kernel aplicar
         kernel_a_aplicar = input("Elige el nombre exacto del kernel que quieres aplicar: ")
+        
+        if kernel_a_aplicar.lower() == 'salir':
+            break
+            
         if kernel_a_aplicar not in KERNELS:
             print("Error: Kernel no válido. Inténtalo de nuevo.")
+            continue
+            
+        kernel_seleccionado = KERNELS[kernel_a_aplicar]
 
-    # --- 2. PREGUNTAR POR LA CARPETA DESTINO ---
-    carpeta_destino = input("Ingresa el nombre de la carpeta destino (ej: Filtradas_Sobel): ")
+        # 2. Preguntar dónde guardar
+        carpeta_destino = input(f"Ingresa el nombre de la carpeta destino (ej: {kernel_a_aplicar}): ")
 
-    if not carpeta_destino:
-        print("Error: Debes ingresar un nombre para la carpeta destino.")
-    else:
+        if not carpeta_destino:
+            print("Error: Debes ingresar un nombre para la carpeta destino.")
+            continue
+
+        # 3. Crear la carpeta de destino
+        os.makedirs(carpeta_destino, exist_ok=True)
         print(f"\nProcesando imágenes con el kernel '{kernel_a_aplicar}'. Guardando en '{carpeta_destino}'...")
 
-        # --- 3. ITERAR Y PROCESAR IMÁGENES ---
+        # 4. Iterar y procesar todas las 30 imágenes
         for i in range(1, 31):
             nombre_archivo = f"{i}.jpg"
             ruta_imagen = os.path.join(CARPETA_ORIGINALES, nombre_archivo)
             
             if os.path.exists(ruta_imagen):
-                print(f"\nProcesando: {ruta_imagen}")
-                aplicar_filtro_manual(ruta_imagen, kernel_a_aplicar, carpeta_destino)
+                print(f"Procesando: {nombre_archivo}...")
+                procesar_y_guardar_imagen(
+                    ruta_imagen, 
+                    carpeta_destino, 
+                    kernel_a_aplicar, 
+                    kernel_seleccionado, 
+                    ANCHO_OBJETIVO, 
+                    ALTO_OBJETIVO
+                )
             else:
-                print(f"\nAdvertencia: No se encontró {ruta_imagen}. Saltando...")
+                print(f"Advertencia: No se encontró {ruta_imagen}. Saltando...")
         
-        print("\n--- Proceso completado ---")
+        print(f"\n--- Lote completado para '{kernel_a_aplicar}' ---")
+
+    print("Proceso de preprocesamiento finalizado.")
