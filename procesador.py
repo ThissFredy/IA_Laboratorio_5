@@ -3,6 +3,8 @@ from PIL import Image
 import numpy as np
 import os
 import pandas as pd
+# Importar la nueva función de filtros
+from filtros import convertir_a_grises_math
 
 # Dimensiones estándar de entrada
 ANCHO_ESTANDAR = 400
@@ -47,9 +49,10 @@ def procesar_datos_excel(ruta_excel, carpeta_imagenes, train_percent):
         ruta_img = os.path.join(carpeta_imagenes, nombre_img)
         
         try:
-            # ¡IMPORTANTE! El entrenamiento siempre usa la imagen en escala de grises
-            # como lo definimos en el dataset (personalizada1, etc.)
+            # --- CAMBIO ---
+            # Ahora procesar_imagen_a_vector usa la fórmula matemática
             vector_img = procesar_imagen_a_vector(ruta_img)
+            # --- FIN CAMBIO ---
             
             vectores_x_img.append(vector_img)
             vectores_x_escala.append(px_cm)
@@ -81,6 +84,7 @@ def procesar_datos_excel(ruta_excel, carpeta_imagenes, train_percent):
     n_entradas = X_final.shape[1]
     n_salidas = y_final.shape[1]
 
+    # --- Barajar y dividir los datos (70/15/15) ---
     num_patrones = len(X_final)
     indices = np.arange(num_patrones)
     np.random.shuffle(indices)
@@ -104,9 +108,11 @@ def procesar_datos_excel(ruta_excel, carpeta_imagenes, train_percent):
     return X_train, y_train, X_val, y_val, X_test, y_test, \
            n_entradas, n_salidas, params_norm
 
+# --- CAMBIO: ESTA FUNCIÓN AHORA USA LA FÓRMULA MATEMÁTICA ---
 def procesar_imagen_a_vector(ruta_o_pil):
     """
     Procesa una imagen al estándar de la RED NEURONAL (400x184, Grises).
+    Usa la fórmula de luminosidad matemática.
     """
     try:
         if isinstance(ruta_o_pil, str):
@@ -116,12 +122,21 @@ def procesar_imagen_a_vector(ruta_o_pil):
     except Exception as e:
         raise IOError(f"No se pudo abrir la imagen: {e}")
 
-    img_l = img.convert("L") 
+    # Asegurar que sea RGB para la conversión matemática
+    img_rgb = img.convert("RGB") 
             
-    ancho, alto = img_l.size
+    ancho, alto = img_rgb.size
     if alto > ancho:
-        img_l = img_l.rotate(-90, resample=Image.Resampling.BICUBIC, expand=True)
+        img_rgb = img_rgb.rotate(-90, resample=Image.Resampling.BICUBIC, expand=True)
     
-    img_base = img_l.resize((ANCHO_ESTANDAR, ALTO_ESTANDAR), Image.Resampling.BICUBIC)
+    # Redimensionar
+    img_base_rgb = img_rgb.resize((ANCHO_ESTANDAR, ALTO_ESTANDAR), Image.Resampling.BICUBIC)
     
-    return np.array(img_base).flatten()
+    # Convertir a array RGB
+    arr_rgb = np.array(img_base_rgb)
+    
+    # Aplicar fórmula matemática de grises
+    arr_gray = convertir_a_grises_math(arr_rgb)
+    
+    # Aplanar y devolver
+    return arr_gray.flatten()

@@ -14,7 +14,13 @@ import re
 
 from backpropagation import RedNeuronalBackpropagation
 from procesador import procesar_datos_excel, procesar_imagen_a_vector
-from filtros import KERNELS, aplicar_convolucion_matematica
+# --- CAMBIO: Importar todo desde filtros.py ---
+from filtros import (
+    KERNELS, aplicar_convolucion_matematica, 
+    convertir_a_grises_math, 
+    delete_red, delete_green, delete_blue,
+    aplicar_filtro_mediana_manual
+)
 
 class BackpropagationGUI(tk.Tk):
     def __init__(self):
@@ -65,21 +71,8 @@ class BackpropagationGUI(tk.Tk):
         self.notebook.tab(1, state="disabled")
         self.notebook.tab(2, state="disabled")
 
-    # --- Funciones auxiliares de filtros ---
-    def _delete_red(self, arr_img_rgb):
-        arr_out = arr_img_rgb.copy()
-        arr_out[:, :, 0] = 0
-        return arr_out
-
-    def _delete_green(self, arr_img_rgb):
-        arr_out = arr_img_rgb.copy()
-        arr_out[:, :, 1] = 0
-        return arr_out
-
-    def _delete_blue(self, arr_img_rgb):
-        arr_out = arr_img_rgb.copy()
-        arr_out[:, :, 2] = 0
-        return arr_out
+    # --- CAMBIO: Funciones auxiliares de filtro eliminadas ---
+    # (Ahora están en filtros.py)
 
     def _crear_encabezado(self):
         header_frame = ttk.Frame(self, padding="5", style="Header.TFrame")
@@ -248,12 +241,12 @@ class BackpropagationGUI(tk.Tk):
 
     def actualizar_paso_entrenamiento(self, generador):
         if not self.entrenamiento_activo:
-            self.finalizar_entrenamiento("Entrenamiento detenido por el usuario.")
+            # No llamar a finalizar aquí, 'parar_entrenamiento' ya lo hace.
             return
         try:
             epoca, mse = next(generador)
             self.datos_lms.append((epoca + 1, mse))
-            if (epoca + 1) % 1 == 0 or epoca == 0:
+            if (epoca + 1) % 1 == 0 or epoca == 0: # Actualizar cada época
                 self.actualizar_grafica_lms()
                 info = f"Época: {epoca + 1}\nMSE: {mse:.8f}\n"; 
                 self.texto_resultados.config(state=tk.NORMAL); self.texto_resultados.delete("1.0", tk.END); self.texto_resultados.insert(tk.END, info); self.texto_resultados.config(state=tk.DISABLED)
@@ -275,26 +268,34 @@ class BackpropagationGUI(tk.Tk):
             self.finalizar_entrenamiento(f"Entrenamiento fallido: {e}", ejecutar_validacion=False)
 
     def finalizar_entrenamiento(self, mensaje, ejecutar_validacion=False):
+        # Asegurarse de que no se ejecute dos veces si se detuvo manualmente
+        if not self.entrenamiento_activo and "detenido" not in mensaje:
+            return 
+            
+        self.entrenamiento_activo = False # Asegurar que esté apagado
+        
         messagebox.showinfo("Fin del Entrenamiento", mensaje)
         self.actualizar_grafica_lms()
-        self.entrenamiento_activo = False
         self.boton_entrenar.config(state=tk.NORMAL)
         self.boton_parar.config(state=tk.DISABLED)
         self.boton_exportar.config(state=tk.NORMAL)
         
-        if ejecutar_validacion:
+        if ejecutar_validacion and self.red_neuronal:
             self.ejecutar_validacion()
             self.boton_probar_test.config(state=tk.NORMAL)
             
         self.notebook.tab(1, state="normal")
         self.notebook.tab(2, state="normal")
-        messagebox.showinfo("Siguiente Paso", "La red ha sido entrenada. Ya puedes ir a la pestaña 'Preprocesamiento' para cargar una imagen.")
+        
+        if "detenido" not in mensaje:
+             messagebox.showinfo("Siguiente Paso", "La red ha sido entrenada. Ya puedes ir a la pestaña 'Preprocesamiento' para cargar una imagen.")
 
     def actualizar_grafica_lms(self):
         self.grafica_lms.clear()
         self.grafica_lms.set_title("Error Cuadrático Medio (MSE) vs. Época")
         self.grafica_lms.set_xlabel("Época")
         self.grafica_lms.set_ylabel("MSE")
+        # Mantener la escala logarítmica que tenías, es mejor para MSE
         self.grafica_lms.set_yscale("log") 
         if self.datos_lms:
             epocas, errores = zip(*self.datos_lms)
@@ -392,9 +393,10 @@ class BackpropagationGUI(tk.Tk):
         panel_filtros.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         ttk.Label(panel_filtros, text="Aplicar Filtro Individual:").pack(anchor="w", pady=(0, 5))
         
+        # --- CAMBIO: Lista de filtros actualizada ---
         lista_filtros = [
             "Mediana",
-            "Convertir a Grises",
+            "Grises",
             "Sin Rojo",
             "Sin Verde",
             "Sin Azul",
@@ -496,28 +498,28 @@ class BackpropagationGUI(tk.Tk):
         if "---" in nombre_filtro: return 
 
         try:
-            # Siempre empieza desde la original RGB estandarizada
             img_base_filtrar = self.img_preproc_standard_original_rgb.copy()
             arr_base = np.array(img_base_filtrar)
             img_resultado = None
 
             if nombre_filtro == "Mediana":
-                # Filtro Mediana de PIL funciona en RGB
-                img_resultado = img_base_filtrar.filter(ImageFilter.MedianFilter(size=3))
-            
-            elif nombre_filtro == "Convertir a Grises":
-                img_resultado = img_base_filtrar.convert("L")
+                arr_filtrado = aplicar_filtro_mediana_manual(arr_base, tamano_ventana=3)
+                img_resultado = Image.fromarray(arr_filtrado)
+
+            elif nombre_filtro == "Grises":
+                arr_filtrado = convertir_a_grises_math(arr_base)
+                img_resultado = Image.fromarray(arr_filtrado)
             
             elif nombre_filtro == "Sin Rojo":
-                arr_filtrado = self._delete_red(arr_base)
+                arr_filtrado = delete_red(arr_base)
                 img_resultado = Image.fromarray(arr_filtrado)
             
             elif nombre_filtro == "Sin Verde":
-                arr_filtrado = self._delete_green(arr_base)
+                arr_filtrado = delete_green(arr_base)
                 img_resultado = Image.fromarray(arr_filtrado)
             
             elif nombre_filtro == "Sin Azul":
-                arr_filtrado = self._delete_blue(arr_base)
+                arr_filtrado = delete_blue(arr_base)
                 img_resultado = Image.fromarray(arr_filtrado)
             
             elif nombre_filtro == "Segmentar (Binarizar)":
@@ -532,13 +534,11 @@ class BackpropagationGUI(tk.Tk):
                 img_base_gray = img_base_filtrar.convert("L")
                 arr_base_gray = np.array(img_base_gray)
                 
-                # --- AQUÍ ESTABA EL BUG ---
-                # Se aplicaba a 'arr_filtrado' (que era None) en lugar de 'arr_base_gray'
+                # --- Corrección de Bug ---
                 if "Pez Claro" in tipo:
                     arr_filtrado = (arr_base_gray > umbral) * 255
                 else: # Pez Oscuro
                     arr_filtrado = (arr_base_gray < umbral) * 255
-                # --- FIN DE LA CORRECCIÓN ---
                 
                 img_resultado = Image.fromarray(arr_filtrado.astype(np.uint8))
             
@@ -579,7 +579,7 @@ class BackpropagationGUI(tk.Tk):
         self.secuencia_filtros = []
         self.lista_secuencia.delete(0, tk.END)
 
-    # --- CORRECCIÓN DE BUG: Secuencia de binarización ---
+    # --- CAMBIO: Lógica de secuencia actualizada ---
     def preproc_ejecutar_secuencia(self):
         if not self.img_preproc_original:
             messagebox.showwarning("Sin Imagen", "Primero debes cargar una imagen."); return
@@ -592,16 +592,20 @@ class BackpropagationGUI(tk.Tk):
                 
                 if nombre_filtro == "Mediana":
                     img_temp_pil = img_temp_pil.filter(ImageFilter.MedianFilter(size=3))
-                
-                elif nombre_filtro == "Convertir a Grises":
-                    img_temp_pil = img_temp_pil.convert("L")
+
+                elif nombre_filtro == "Grises":
+                    if img_temp_pil.mode != "RGB":
+                        raise ValueError("El filtro 'Grises (Matemático)' solo se aplica a imágenes RGB.")
+                    arr_rgb = np.array(img_temp_pil)
+                    arr_filtrado = convertir_a_grises_math(arr_rgb)
+                    img_temp_pil = Image.fromarray(arr_filtrado)
 
                 elif nombre_filtro in ["Sin Rojo", "Sin Verde", "Sin Azul"]:
                     if img_temp_pil.mode != "RGB":
                         raise ValueError(f"Filtro '{nombre_filtro}' solo se aplica a imágenes RGB.")
-                    if nombre_filtro == "Sin Rojo": arr_filtrado = self._delete_red(arr_temp)
-                    if nombre_filtro == "Sin Verde": arr_filtrado = self._delete_green(arr_temp)
-                    if nombre_filtro == "Sin Azul": arr_filtrado = self._delete_blue(arr_temp)
+                    if nombre_filtro == "Sin Rojo": arr_filtrado = delete_red(arr_temp)
+                    if nombre_filtro == "Sin Verde": arr_filtrado = delete_green(arr_temp)
+                    if nombre_filtro == "Sin Azul": arr_filtrado = delete_blue(arr_temp)
                     img_temp_pil = Image.fromarray(arr_filtrado)
 
                 elif nombre_filtro.startswith("Segmentar"):
@@ -615,23 +619,18 @@ class BackpropagationGUI(tk.Tk):
                         img_temp_pil = img_temp_pil.convert("L")
                     arr_temp_gray = np.array(img_temp_pil)
                     
-                    # --- AQUÍ ESTABA EL BUG ---
-                    # Faltaba la lógica 'if/else' para el tipo
                     if "Pez Claro" in tipo:
                         arr_filtrado = (arr_temp_gray > umbral) * 255
                     else:
                         arr_filtrado = (arr_temp_gray < umbral) * 255
-                    # --- FIN DE LA CORRECCIÓN ---
                     
                     img_temp_pil = Image.fromarray(arr_filtrado.astype(np.uint8))
                 
                 else:
                     kernel = KERNELS.get(nombre_filtro)
                     if kernel is not None:
-                        # Asegurarse de que el kernel se aplica al modo de imagen correcto
                         if img_temp_pil.mode == "L" and arr_temp.ndim == 3:
-                            # Esto puede pasar si el filtro anterior era 'Convertir a Grises'
-                            arr_temp = np.array(img_temp_pil)
+                             arr_temp = np.array(img_temp_pil)
                         
                         arr_filtrado = aplicar_convolucion_matematica(arr_temp, kernel)
                         img_temp_pil = Image.fromarray(arr_filtrado)
@@ -649,8 +648,8 @@ class BackpropagationGUI(tk.Tk):
         if self.img_preproc_actual.mode != "L":
             messagebox.showerror("Error de Modo",
                                  "La imagen debe estar en ESCALA DE GRISES para la predicción.\n\n"
-                                 "Por favor, aplique el filtro 'Convertir a Grises' o "
-                                 "un filtro de 'Segmentar' antes de continuar.")
+                                 "Por favor, aplique el filtro 'Grises (Librería PIL)', 'Grises (Matemático)' o "
+                                 "'Segmentar (Binarizar)' antes de continuar.")
             return
         
         img_preview = self.img_preproc_actual.resize((self.preview_width, self.preview_height), Image.Resampling.NEAREST)
@@ -826,7 +825,8 @@ class BackpropagationGUI(tk.Tk):
         if self.img_preproc_actual.mode != "L":
             messagebox.showerror("Error de Modo",
                                  "La imagen debe estar en ESCALA DE GRISES para la predicción.\n\n"
-                                 "Aplica el filtro 'Convertir a Grises' o 'Segmentar' en la Pestaña 2.")
+                                 "Aplica el filtro Grises o "
+                                 "'Segmentar (Binarizar)' antes de continuar.")
             return
         
         if self.pixel_scale is None or self.pixel_scale == 0:

@@ -193,7 +193,7 @@ def procesar_imagenes():
         
         img_base = img.resize((ANCHO_DESEADO, ALTO_DESEADO), Image.Resampling.BICUBIC)
         
-        # img_base.save(os.path.join(CARPETA_AUMENTADA, f"{i}_base.jpg"))
+        img_base.save(os.path.join(CARPETA_AUMENTADA, f"{i}_base.jpg"))
 
 
         arr_base = np.array(img_base)
