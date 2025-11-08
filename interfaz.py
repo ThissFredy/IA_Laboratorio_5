@@ -14,7 +14,6 @@ import re
 
 from backpropagation import RedNeuronalBackpropagation
 from procesador import procesar_datos_excel, procesar_imagen_a_vector
-# --- CAMBIO: Importar todo desde filtros.py ---
 from filtros import (
     KERNELS, aplicar_convolucion_matematica, 
     convertir_a_grises_math, 
@@ -52,6 +51,12 @@ class BackpropagationGUI(tk.Tk):
         self.pixel_scale = None
         self.img_prediccion_tk = None
 
+        # --- CAMBIO: Añadido para el scroll de la pestaña 2 ---
+        self.canvas_preproc = None
+        self.scrollable_frame_preproc = None
+        self.scrollable_window_preproc = None
+        # --- FIN CAMBIO ---
+
         self._crear_encabezado()
         
         self.notebook = ttk.Notebook(self)
@@ -71,8 +76,7 @@ class BackpropagationGUI(tk.Tk):
         self.notebook.tab(1, state="disabled")
         self.notebook.tab(2, state="disabled")
 
-    # --- CAMBIO: Funciones auxiliares de filtro eliminadas ---
-    # (Ahora están en filtros.py)
+    # (Funciones de filtro eliminadas, ahora en filtros.py)
 
     def _crear_encabezado(self):
         header_frame = ttk.Frame(self, padding="5", style="Header.TFrame")
@@ -105,6 +109,7 @@ class BackpropagationGUI(tk.Tk):
         ttk.Separator(self, orient='horizontal').pack(fill='x', pady=5)
 
     def _crear_ui_entrenamiento(self):
+        # ... (Esta función está bien, sin cambios) ...
         frame = self.tab_entrenamiento
         
         panel_config = ttk.LabelFrame(frame, text="Hiperparámetros", padding=10)
@@ -155,8 +160,9 @@ class BackpropagationGUI(tk.Tk):
         self.texto_resultados = tk.Text(contenedor_inferior, width=35, height=15, state=tk.DISABLED, font=("Consolas", 10))
         self.texto_resultados.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
 
-    # --- Funciones Pestaña 1 ---
+    # --- Funciones Pestaña 1 (Sin cambios) ---
     def cargar_excel_entrenamiento(self):
+        # ... (código sin cambios)
         ruta = filedialog.askopenfilename(title="Seleccionar Excel", filetypes=[("Archivos Excel", "*.xlsx")])
         if not ruta: return
         self.ruta_excel = ruta
@@ -164,6 +170,7 @@ class BackpropagationGUI(tk.Tk):
         self._verificar_estado_procesar()
 
     def cargar_carpeta_imagenes(self):
+        # ... (código sin cambios)
         ruta = filedialog.askdirectory(title="Seleccionar Carpeta con Imágenes")
         if not ruta: return
         self.ruta_carpeta_img = ruta
@@ -171,34 +178,31 @@ class BackpropagationGUI(tk.Tk):
         self._verificar_estado_procesar()
 
     def _verificar_estado_procesar(self):
+        # ... (código sin cambios)
         if self.ruta_excel and self.ruta_carpeta_img:
             self.boton_cargar_datos.config(state=tk.NORMAL)
         else:
             self.boton_cargar_datos.config(state=tk.DISABLED)
 
     def procesar_datos_entrenamiento(self):
+        # ... (código sin cambios)
         try:
             train_percent = float(self.campo_train_percent.get())
             if not 10 < train_percent < 100:
                 raise ValueError("El porcentaje de entrenamiento debe estar entre 10 y 99")
-
             self.X_train, self.y_train, self.X_val, self.y_val, self.X_test, self.y_test, \
             n_in, n_out, self.params_norm = \
                 procesar_datos_excel(self.ruta_excel, self.ruta_carpeta_img, train_percent)
-            
             total_patrones = len(self.X_train) + len(self.X_val) + len(self.X_test)
-            
             info = (f"Cargados {total_patrones} patrones.\n"
                     f" - Entrenamiento: {len(self.X_train)} ({train_percent:.0f}%)\n"
                     f" - Validación: {len(self.X_val)} (~{(100-train_percent)/2:.0f}%)\n"
                     f" - Prueba: {len(self.X_test)} (~{(100-train_percent)/2:.0f}%)\n"
                     f" - {n_in} Neuronas Entrada\n"
                     f" - {n_out} Neurona Salida")
-            
             self.etiqueta_datos.config(text=info, foreground="blue")
             self.boton_entrenar.config(state=tk.NORMAL)
             messagebox.showinfo("Éxito", info)
-
         except Exception as e:
             messagebox.showerror("Error al Procesar Datos", f"Ocurrió un error:\n{e}")
             self.etiqueta_datos.config(text="Error al procesar", foreground="red")
@@ -213,26 +217,20 @@ class BackpropagationGUI(tk.Tk):
             epocas = int(self.campo_epocas.get())
         except ValueError: 
             messagebox.showerror("Error de Parámetros", "Los hiperparámetros deben ser números válidos."); return
-        
         self.texto_resultados.config(state=tk.NORMAL); self.texto_resultados.delete("1.0", tk.END); self.texto_resultados.config(state=tk.DISABLED)
         self.grafica_lms.clear(); self.lienzo_lms.draw()
-        
         n_entradas = self.X_train.shape[1]
         n_salidas = self.y_train.shape[1]
-        
         self.red_neuronal = RedNeuronalBackpropagation(n_entradas, neuronas_ocultas, n_salidas)
         self.red_neuronal.min_escala = self.params_norm["min_escala"]
         self.red_neuronal.max_escala = self.params_norm["max_escala"]
         self.red_neuronal.min_longitud = self.params_norm["min_longitud"]
         self.red_neuronal.max_longitud = self.params_norm["max_longitud"]
-        
         self.datos_lms = []
         generador = self.red_neuronal.entrenar(self.X_train, self.y_train, alpha, momento, epocas, precision)
-        
         self.entrenamiento_activo = True
         self.boton_entrenar.config(state=tk.DISABLED); self.boton_parar.config(state=tk.NORMAL)
         self.boton_exportar.config(state=tk.DISABLED); self.boton_probar_test.config(state=tk.DISABLED)
-        
         self.after(10, self.actualizar_paso_entrenamiento, generador)
 
     def parar_entrenamiento(self): 
@@ -241,12 +239,11 @@ class BackpropagationGUI(tk.Tk):
 
     def actualizar_paso_entrenamiento(self, generador):
         if not self.entrenamiento_activo:
-            # No llamar a finalizar aquí, 'parar_entrenamiento' ya lo hace.
             return
         try:
             epoca, mse = next(generador)
             self.datos_lms.append((epoca + 1, mse))
-            if (epoca + 1) % 1 == 0 or epoca == 0: # Actualizar cada época
+            if (epoca + 1) % 1 == 0 or epoca == 0: 
                 self.actualizar_grafica_lms()
                 info = f"Época: {epoca + 1}\nMSE: {mse:.8f}\n"; 
                 self.texto_resultados.config(state=tk.NORMAL); self.texto_resultados.delete("1.0", tk.END); self.texto_resultados.insert(tk.END, info); self.texto_resultados.config(state=tk.DISABLED)
@@ -256,37 +253,29 @@ class BackpropagationGUI(tk.Tk):
                 epoca_final, mse_final = self.datos_lms[-1]
                 info = f"Época Final: {epoca_final}\nMSE Final: {mse_final:.8f}\n"; 
                 self.texto_resultados.config(state=tk.NORMAL); self.texto_resultados.delete("1.0", tk.END); self.texto_resultados.insert(tk.END, info); self.texto_resultados.config(state=tk.DISABLED)
-            
             mensaje_final = "Entrenamiento finalizado."
             if self.datos_lms and self.datos_lms[-1][1] <= float(self.campo_precision.get()):
                 mensaje_final += "\n(Se alcanzó la precisión deseada)"
-            
             self.finalizar_entrenamiento(mensaje_final, ejecutar_validacion=True)
-            
         except Exception as e:
             messagebox.showerror("Error en Entrenamiento", f"Error: {e}")
             self.finalizar_entrenamiento(f"Entrenamiento fallido: {e}", ejecutar_validacion=False)
 
     def finalizar_entrenamiento(self, mensaje, ejecutar_validacion=False):
-        # Asegurarse de que no se ejecute dos veces si se detuvo manualmente
+        # ... (código sin cambios)
         if not self.entrenamiento_activo and "detenido" not in mensaje:
             return 
-            
-        self.entrenamiento_activo = False # Asegurar que esté apagado
-        
+        self.entrenamiento_activo = False 
         messagebox.showinfo("Fin del Entrenamiento", mensaje)
         self.actualizar_grafica_lms()
         self.boton_entrenar.config(state=tk.NORMAL)
         self.boton_parar.config(state=tk.DISABLED)
         self.boton_exportar.config(state=tk.NORMAL)
-        
         if ejecutar_validacion and self.red_neuronal:
             self.ejecutar_validacion()
             self.boton_probar_test.config(state=tk.NORMAL)
-            
         self.notebook.tab(1, state="normal")
         self.notebook.tab(2, state="normal")
-        
         if "detenido" not in mensaje:
              messagebox.showinfo("Siguiente Paso", "La red ha sido entrenada. Ya puedes ir a la pestaña 'Preprocesamiento' para cargar una imagen.")
 
@@ -295,7 +284,6 @@ class BackpropagationGUI(tk.Tk):
         self.grafica_lms.set_title("Error Cuadrático Medio (MSE) vs. Época")
         self.grafica_lms.set_xlabel("Época")
         self.grafica_lms.set_ylabel("MSE")
-        # Mantener la escala logarítmica que tenías, es mejor para MSE
         self.grafica_lms.set_yscale("log") 
         if self.datos_lms:
             epocas, errores = zip(*self.datos_lms)
@@ -303,58 +291,45 @@ class BackpropagationGUI(tk.Tk):
         self.grafica_lms.grid(True); self.lienzo_lms.draw()
 
     def _calcular_confianza(self, X_set, y_set):
-        """Calcula la confianza (100-MAPE) para un set de datos."""
         if X_set is None or len(X_set) == 0:
             return 0, 0
-
         pred_norm = self.red_neuronal.predecir(X_set)
-        
         min_l = self.red_neuronal.min_longitud
         max_l = self.red_neuronal.max_longitud
-        
         pred_cm = ((pred_norm * (max_l - min_l)) + min_l).ravel()
         real_cm = ((y_set * (max_l - min_l)) + min_l).ravel()
-        
         epsilon = 1e-8
         mape = np.mean(np.abs((real_cm - pred_cm) / (real_cm + epsilon))) * 100
-        
         confianza = 100.0 - mape
         return confianza, mape
 
     def ejecutar_validacion(self):
-        """Se ejecuta automáticamente al final del entrenamiento."""
         confianza, mape = self._calcular_confianza(self.X_val, self.y_val)
-        
         info = (f"\n--- Validación ({len(self.X_val)} patrones) ---\n"
                 f"Confianza: {confianza:.2f}%\n"
                 f"Error Promedio: {mape:.2f}%\n")
-        
         self.texto_resultados.config(state=tk.NORMAL)
         self.texto_resultados.insert(tk.END, info)
         self.texto_resultados.config(state=tk.DISABLED)
 
     def ejecutar_prueba_test(self):
-        """Se ejecuta al presionar el botón de Test."""
         confianza, mape = self._calcular_confianza(self.X_test, self.y_test)
-        
         info = (f"--- Prueba Final ({len(self.X_test)} patrones) ---\n"
                 f"Confianza: {confianza:.2f}%\n"
                 f"Error Promedio: {mape:.2f}%\n\n"
                 f"(Este es el resultado final con datos que la red nunca vio)")
-        
         messagebox.showinfo("Resultado de la Prueba", info)
 
     def exportar_pesos(self):
+        # ... (código sin cambios)
         if not self.red_neuronal:
             messagebox.showwarning("Sin datos", "No hay una red entrenada para exportar.")
             return
-            
         ruta_archivo = filedialog.asksaveasfilename(
             defaultextension=".txt",
             filetypes=[("Archivos de Texto", "*.txt"), ("Todos los archivos", "*.*")]
         )
         if not ruta_archivo: return
-        
         try:
             with open(ruta_archivo, 'w') as f:
                 f.write("# --- Parametros Normalizacion ---\n")
@@ -362,7 +337,6 @@ class BackpropagationGUI(tk.Tk):
                 f.write(f"max_escala: {self.params_norm['max_escala']}\n")
                 f.write(f"min_longitud: {self.params_norm['min_longitud']}\n")
                 f.write(f"max_longitud: {self.params_norm['max_longitud']}\n")
-                
                 f.write("# --- Pesos Capa Oculta (w_ji) ---\n")
                 np.savetxt(f, self.red_neuronal.w_ji)
                 f.write("# --- Sesgos Capa Oculta (b_j) ---\n")
@@ -371,14 +345,47 @@ class BackpropagationGUI(tk.Tk):
                 np.savetxt(f, self.red_neuronal.w_kj)
                 f.write("# --- Sesgos Capa Salida (b_k) ---\n")
                 np.savetxt(f, self.red_neuronal.b_k)
-
             messagebox.showinfo("Éxito", f"Pesos y parámetros guardados en:\n{ruta_archivo}")
         except Exception as e:
             messagebox.showerror("Error al guardar", f"Ocurrió un error: {e}")
             
-    # --- PESTAÑA 2: PREPROCESAMIENTO ---
+    def _on_preproc_frame_configure(self, event=None):
+        """Actualiza la región de scroll del canvas de preprocesamiento."""
+        self.canvas_preproc.configure(scrollregion=self.canvas_preproc.bbox("all"))
+
+    def _on_preproc_canvas_configure(self, event):
+        """Ajusta el ancho del frame interno al ancho del canvas."""
+        self.canvas_preproc.itemconfig(self.scrollable_window_preproc, width=event.width)
+
     def _crear_ui_preprocesamiento(self):
-        frame = self.tab_preprocesamiento
+        main_container = self.tab_preprocesamiento
+        
+        # Canvas principal
+        self.canvas_preproc = tk.Canvas(main_container)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=self.canvas_preproc.yview)
+        self.canvas_preproc.configure(yscrollcommand=scrollbar.set)
+        
+        # Empaquetado
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas_preproc.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Frame interno que contendrá todo
+        self.scrollable_frame_preproc = ttk.Frame(self.canvas_preproc)
+        
+        # Poner el frame dentro del canvas
+        self.scrollable_window_preproc = self.canvas_preproc.create_window((0, 0), window=self.scrollable_frame_preproc, anchor="nw")
+
+        # Bindings para que el scroll funcione con el re-tamaño
+        self.scrollable_frame_preproc.bind("<Configure>", self._on_preproc_frame_configure)
+        self.canvas_preproc.bind("<Configure>", self._on_preproc_canvas_configure)
+        
+        # --- FIN CAMBIO ---
+
+        # --- CAMBIO: El padre de todos los widgets ahora es self.scrollable_frame_preproc ---
+        frame = self.scrollable_frame_preproc 
+        
         panel_superior = ttk.Frame(frame)
         panel_superior.pack(fill=tk.X, pady=5)
         
@@ -388,15 +395,15 @@ class BackpropagationGUI(tk.Tk):
 
         panel_principal = ttk.Frame(frame)
         panel_principal.pack(fill=tk.BOTH, expand=True, pady=10)
+        # --- FIN CAMBIO ---
 
         panel_filtros = ttk.LabelFrame(panel_principal, text="Controles de Filtros", padding=10)
         panel_filtros.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         ttk.Label(panel_filtros, text="Aplicar Filtro Individual:").pack(anchor="w", pady=(0, 5))
         
-        # --- CAMBIO: Lista de filtros actualizada ---
         lista_filtros = [
-            "Mediana",
-            "Grises",
+            "Mediana (Manual)",
+            "Grises (Matemático)",
             "Sin Rojo",
             "Sin Verde",
             "Sin Azul",
@@ -502,11 +509,14 @@ class BackpropagationGUI(tk.Tk):
             arr_base = np.array(img_base_filtrar)
             img_resultado = None
 
-            if nombre_filtro == "Mediana":
+            if nombre_filtro == "Mediana (Manual)":
                 arr_filtrado = aplicar_filtro_mediana_manual(arr_base, tamano_ventana=3)
                 img_resultado = Image.fromarray(arr_filtrado)
-
-            elif nombre_filtro == "Grises":
+            
+            elif nombre_filtro == "Grises (Librería PIL)":
+                img_resultado = img_base_filtrar.convert("L")
+            
+            elif nombre_filtro == "Grises (Matemático)":
                 arr_filtrado = convertir_a_grises_math(arr_base)
                 img_resultado = Image.fromarray(arr_filtrado)
             
@@ -531,13 +541,11 @@ class BackpropagationGUI(tk.Tk):
                     return
                 
                 tipo = self.combo_segment_tipo.get()
-                img_base_gray = img_base_filtrar.convert("L")
-                arr_base_gray = np.array(img_base_gray)
+                arr_base_gray = np.array(img_base_filtrar.convert("L"))
                 
-                # --- Corrección de Bug ---
                 if "Pez Claro" in tipo:
                     arr_filtrado = (arr_base_gray > umbral) * 255
-                else: # Pez Oscuro
+                else:
                     arr_filtrado = (arr_base_gray < umbral) * 255
                 
                 img_resultado = Image.fromarray(arr_filtrado.astype(np.uint8))
@@ -579,7 +587,6 @@ class BackpropagationGUI(tk.Tk):
         self.secuencia_filtros = []
         self.lista_secuencia.delete(0, tk.END)
 
-    # --- CAMBIO: Lógica de secuencia actualizada ---
     def preproc_ejecutar_secuencia(self):
         if not self.img_preproc_original:
             messagebox.showwarning("Sin Imagen", "Primero debes cargar una imagen."); return
@@ -590,10 +597,14 @@ class BackpropagationGUI(tk.Tk):
             for nombre_filtro in self.secuencia_filtros:
                 arr_temp = np.array(img_temp_pil)
                 
-                if nombre_filtro == "Mediana":
-                    img_temp_pil = img_temp_pil.filter(ImageFilter.MedianFilter(size=3))
-
-                elif nombre_filtro == "Grises":
+                if nombre_filtro == "Mediana (Manual)":
+                    arr_filtrado = aplicar_filtro_mediana_manual(arr_temp, tamano_ventana=3)
+                    img_temp_pil = Image.fromarray(arr_filtrado)
+                
+                elif nombre_filtro == "Grises (Librería PIL)":
+                    img_temp_pil = img_temp_pil.convert("L")
+                
+                elif nombre_filtro == "Grises (Matemático)":
                     if img_temp_pil.mode != "RGB":
                         raise ValueError("El filtro 'Grises (Matemático)' solo se aplica a imágenes RGB.")
                     arr_rgb = np.array(img_temp_pil)
@@ -648,7 +659,7 @@ class BackpropagationGUI(tk.Tk):
         if self.img_preproc_actual.mode != "L":
             messagebox.showerror("Error de Modo",
                                  "La imagen debe estar en ESCALA DE GRISES para la predicción.\n\n"
-                                 "Por favor, aplique el filtro 'Grises (Librería PIL)', 'Grises (Matemático)' o "
+                                 "Aplica el filtro 'Grises (Librería PIL)', 'Grises (Matemático)' o "
                                  "'Segmentar (Binarizar)' antes de continuar.")
             return
         
@@ -669,54 +680,42 @@ class BackpropagationGUI(tk.Tk):
         
         self.notebook.select(self.tab_prediccion)
 
-    # --- PESTAÑA 3: PREDICCIÓN ---
+    # --- PESTAÑA 3: PREDICCIÓN (Sin cambios) ---
     def _crear_ui_prediccion(self):
+        # ... (código sin cambios)
         frame = self.tab_prediccion
-        
         panel_superior = ttk.LabelFrame(frame, text="Configuración de Predicción", padding=10)
         panel_superior.pack(fill=tk.X, pady=5)
-        
         ttk.Button(panel_superior, text="Cargar Pesos Externos (.txt)", command=self.cargar_pesos_prediccion).pack(side=tk.LEFT, padx=5)
         self.label_pesos_prediccion = ttk.Label(panel_superior, text="Usando red entrenada en esta sesión.", foreground="blue")
         self.label_pesos_prediccion.pack(side=tk.LEFT, padx=10)
-
         panel_principal = ttk.Frame(frame)
         panel_principal.pack(fill=tk.BOTH, expand=True, pady=10)
-        
         panel_preview = ttk.LabelFrame(panel_principal, text="Imagen a Predecir (Dibuja la escala de 1cm)", padding=10)
         panel_preview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
         self.canvas_prediccion = tk.Canvas(panel_preview, width=self.preview_width, height=self.preview_height, bg="#f0f0f0", relief="sunken")
         self.canvas_prediccion.pack(fill=tk.BOTH, expand=True)
-        
         self.canvas_prediccion.bind("<Button-1>", self.on_line_start)
         self.canvas_prediccion.bind("<B1-Motion>", self.on_line_draw)
         self.canvas_prediccion.bind("<ButtonRelease-1>", self.on_line_end)
-        
         panel_control_pred = ttk.Frame(panel_principal, width=300)
         panel_control_pred.pack(side=tk.RIGHT, fill=tk.Y)
-        
         panel_instrucciones = ttk.LabelFrame(panel_control_pred, text="Instrucciones", padding=10)
         panel_instrucciones.pack(fill=tk.X)
-        
         ttk.Label(panel_instrucciones, text="1. Usa la cuadrícula de la imagen como guía.").pack(anchor="w")
         ttk.Label(panel_instrucciones, text="2. Haz clic y arrastra para dibujar una línea").pack(anchor="w")
         ttk.Label(panel_instrucciones, text="   que represente exactamente 1 cm.").pack(anchor="w")
         ttk.Label(panel_instrucciones, text="3. Presiona 'Predecir Longitud'.").pack(anchor="w", pady=(5,0))
-        
         self.label_escala_calculada = ttk.Label(panel_instrucciones, text="Escala: No calculada", foreground="red", font=("Helvetica", 10, "bold"))
         self.label_escala_calculada.pack(pady=10)
-        
         self.boton_predecir = ttk.Button(panel_control_pred, text="Predecir Longitud", command=self.ejecutar_prediccion)
         self.boton_predecir.pack(fill=tk.X, pady=20)
-        
         panel_resultado_final = ttk.LabelFrame(panel_control_pred, text="Resultado", padding=10)
         panel_resultado_final.pack(fill=tk.BOTH, expand=True)
-        
         self.label_resultado_prediccion = ttk.Label(panel_resultado_final, text="Esperando predicción...", font=("Helvetica", 14), anchor="center", justify="center")
         self.label_resultado_prediccion.pack(fill=tk.BOTH, expand=True)
 
-    # --- Funciones de dibujo ---
+    # --- Funciones de dibujo (Corregidas) ---
     def on_line_start(self, event):
         self.canvas_prediccion.delete("linea_escala")
         self.line_start = (event.x, event.y)
@@ -731,24 +730,24 @@ class BackpropagationGUI(tk.Tk):
         if self.line_start:
             x1_scaled, y1_scaled = self.line_start
             x2_scaled, y2_scaled = event.x, event.y
+            # --- CAMBIO: Corregido el typo ---
             distancia_scaled = math.sqrt((x2_scaled - x1_scaled)**2 + (y2_scaled - y1_scaled)**2)
             distancia_original = distancia_scaled / self.scale_factor
             self.pixel_scale = distancia_original
             self.line_start = None
             self.label_escala_calculada.config(text=f"Escala: {self.pixel_scale:.2f} px/cm (base {self.base_width}x{self.base_height})", foreground="green")
 
-    # --- Cargar Pesos desde .TXT ---
+    # --- Cargar Pesos desde .TXT (Sin cambios) ---
     def cargar_pesos_prediccion(self):
+        # ... (código sin cambios)
         ruta_archivo = filedialog.askopenfilename(
             title="Cargar Pesos", 
             filetypes=[("Archivos de Texto", "*.txt"), ("Todos los archivos", "*.*")]
         )
         if not ruta_archivo: return
-        
         try:
             with open(ruta_archivo, 'r') as f:
                 lineas = f.readlines()
-
             def extraer_params(lineas):
                 params = {}
                 seccion_params = False
@@ -758,17 +757,14 @@ class BackpropagationGUI(tk.Tk):
                         continue
                     if linea.startswith("# ---"):
                         seccion_params = False
-                    
                     if seccion_params and ":" in linea:
                         partes = linea.split(":")
                         key = partes[0].strip()
                         value = float(partes[1].strip())
                         params[key] = value
-                
                 if len(params) != 4:
                     raise ValueError("No se encontraron los 4 parámetros de normalización (min/max escala/longitud).")
                 return params
-
             def extraer_array(nombre_bloque):
                 try:
                     inicio = lineas.index(f"# --- {nombre_bloque} ---\n") + 1
@@ -781,75 +777,61 @@ class BackpropagationGUI(tk.Tk):
                     return np.loadtxt(io.StringIO(bloque_texto), ndmin=1)
                 except (ValueError, IndexError):
                     raise ValueError(f"No se pudo encontrar o leer el bloque '{nombre_bloque}' en el archivo.")
-
             params_norm = extraer_params(lineas)
             w_ji = extraer_array("Pesos Capa Oculta (w_ji)")
             b_j = extraer_array("Sesgos Capa Oculta (b_j)")
             w_kj = extraer_array("Pesos Capa Salida (w_kj)")
             b_k = extraer_array("Sesgos Capa Salida (b_k)")
-            
             if b_j.ndim == 0: b_j = np.array([b_j])
             if b_k.ndim == 0: b_k = np.array([b_k])
-            
             n_in, n_oc = w_ji.shape
             n_out = w_kj.shape[1] if w_kj.ndim > 1 else 1
-
             self.red_neuronal = RedNeuronalBackpropagation(n_in, n_oc, n_out)
             self.red_neuronal.w_ji = w_ji
             self.red_neuronal.b_j = b_j
             self.red_neuronal.w_kj = w_kj
             self.red_neuronal.b_k = b_k
-            
             self.red_neuronal.min_escala = params_norm['min_escala']
             self.red_neuronal.max_escala = params_norm['max_escala']
             self.red_neuronal.min_longitud = params_norm['min_longitud']
             self.red_neuronal.max_longitud = params_norm['max_longitud']
-            
             self.label_pesos_prediccion.config(text=f"Pesos cargados: {os.path.basename(ruta_archivo)}", foreground="green")
             self.notebook.tab(1, state="normal"); self.notebook.tab(2, state="normal")
             messagebox.showinfo("Pesos Cargados", "Pesos externos y parámetros cargados. Ya puedes ir a 'Preprocesamiento'.")
             self.notebook.select(self.tab_preprocesamiento)
-            
         except Exception as e:
             messagebox.showerror("Error al Cargar Pesos", f"No se pudieron cargar los pesos. El formato del TXT es incorrecto.\nError: {e}")
 
-    # --- Ejecutar Predicción ---
+    # --- Ejecutar Predicción (Sin cambios) ---
     def ejecutar_prediccion(self):
+        # ... (código sin cambios)
         if not self.red_neuronal:
             messagebox.showwarning("Red no lista", "Primero debes entrenar una red o cargar pesos.")
             return
         if not self.img_preproc_actual:
             messagebox.showwarning("Sin Imagen", "Primero debes cargar y procesar una imagen en la Pestaña 2.")
             return
-        
         if self.img_preproc_actual.mode != "L":
             messagebox.showerror("Error de Modo",
                                  "La imagen debe estar en ESCALA DE GRISES para la predicción.\n\n"
-                                 "Aplica el filtro Grises o "
+                                 "Aplica el filtro 'Grises (Librería PIL)', 'Grises (Matemático)' o "
                                  "'Segmentar (Binarizar)' antes de continuar.")
             return
-        
         if self.pixel_scale is None or self.pixel_scale == 0:
             messagebox.showerror("Error de Entrada", "Debes dibujar una línea de 1cm en la imagen para definir la escala.")
             return
-            
         px_cm_valor = self.pixel_scale
-
         try:
             arr_img = np.array(self.img_preproc_actual)
             vector_img = arr_img.flatten()
             vector_img_norm = vector_img / 255.0
-            
             prediccion_final_cm = self.red_neuronal.predecir_cm(vector_img_norm, px_cm_valor)
             peso_gramos = 0.0141 * (prediccion_final_cm ** 2.95)
-            
             resultado_texto = f"Resolución (Escala): {px_cm_valor:.2f} px/cm\n\n"
             resultado_texto += f"Longitud Predicha:\n{prediccion_final_cm:.2f} cm\n\n"
             resultado_texto += f"Peso Predicho:\n{peso_gramos:.2f} g\n\n"
             resultado_texto += f"Fórmula: P = 0.0141 * L^(2.95)"
-            
             self.label_resultado_prediccion.config(text=resultado_texto, font=("Helvetica", 14, "bold"), foreground="black", justify="left")
-            
         except Exception as e:
             messagebox.showerror("Error de Predicción", f"Ocurrió un error al predecir:\n{e}")
             self.label_resultado_prediccion.config(text="Error", foreground="red")

@@ -1,4 +1,3 @@
-# main.py
 from interfaz import BackpropagationGUI
 
 if __name__ == "__main__":

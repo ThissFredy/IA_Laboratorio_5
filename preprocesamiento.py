@@ -3,8 +3,6 @@ import numpy as np
 from PIL import Image
 
 # --- Constantes de Configuración ---
-ANCHO_DESEADO = 400
-ALTO_DESEADO = 184
 CARPETA_ORIGINALES = "Originales"
 CARPETA_AUMENTADA = "Dataset"
 TOTAL_IMAGENES = 30
@@ -76,17 +74,69 @@ KERNEL_GAUSS = np.array([
     [1,  2,  3,  2, 1]
 ])
 
-def _filtro_mediana(imagen_np_gray, tamano_ventana=3):
+def convertir_a_grises_math(arr_img_rgb):
+    """
+    Convierte un array RGB a escala de grises usando la fórmula de luminosidad.
+    Y = 0.299*R + 0.587*G + 0.114*B
+    """
+    if arr_img_rgb.ndim != 3 or arr_img_rgb.shape[2] != 3:
+        raise ValueError("La imagen de entrada debe ser un array RGB (3 canales).")
+        
+    # Extraer canales
+    R = arr_img_rgb[:, :, 0]
+    G = arr_img_rgb[:, :, 1]
+    B = arr_img_rgb[:, :, 2]
+    
+    # Aplicar la fórmula de luminosidad ponderada
+    gray = 0.299 * R + 0.587 * G + 0.114 * B
+    
+    # Asegurarse de que el tipo de dato sea correcto para una imagen
+    return gray.astype(np.uint8)
+
+def _filtro_mediana_manual(arr_imagen, tamano_ventana=3):
+    """
+    Aplica un filtro de mediana de forma "manual" usando bucles y numpy.
+    Funciona tanto para imágenes en escala de grises (2D) como RGB (3D).
+    """
     pad = tamano_ventana // 2
-    img_h, img_w = imagen_np_gray.shape
-    output_array = np.zeros_like(imagen_np_gray)
-    for y in range(pad, img_h - pad):
-        for x in range(pad, img_w - pad):
-            region = imagen_np_gray[y - pad : y + pad + 1, 
-                                    x - pad : x + pad + 1]
-            mediana = np.median(region)
-            output_array[y, x] = mediana
-    return output_array.astype('uint8')
+    
+    # Crear una imagen de salida vacía
+    output_array = np.zeros_like(arr_imagen)
+    
+    if arr_imagen.ndim == 3:
+        # --- Lógica para Imagen 3D (RGB) ---
+        img_h, img_w, img_c = arr_imagen.shape
+        # Aplicar padding (relleno) a los bordes
+        img_padded = np.pad(arr_imagen, ((pad, pad), (pad, pad), (0, 0)), mode='edge')
+        
+        # Recorrer cada píxel de la imagen original
+        for y in range(img_h):
+            for x in range(img_w):
+                # Recorrer cada canal (R, G, B)
+                for i in range(img_c):
+                    # Extraer la vecindad 3x3
+                    region = img_padded[y : y + tamano_ventana, x : x + tamano_ventana, i]
+                    # Calcular la mediana de los 9 píxeles y asignarla
+                    output_array[y, x, i] = np.median(region)
+
+    elif arr_imagen.ndim == 2:
+        # --- Lógica para Imagen 2D (Grises) ---
+        img_h, img_w = arr_imagen.shape
+        # Aplicar padding (relleno) a los bordes
+        img_padded = np.pad(arr_imagen, ((pad, pad), (pad, pad)), mode='edge')
+        
+        # Recorrer cada píxel
+        for y in range(img_h):
+            for x in range(img_w):
+                # Extraer la vecindad 3x3
+                region = img_padded[y : y + tamano_ventana, x : x + tamano_ventana]
+                # Calcular la mediana y asignarla
+                output_array[y, x] = np.median(region)
+    
+    else:
+        raise ValueError("Dimensiones de array no soportadas, debe ser 2D o 3D.")
+        
+    return output_array.astype(np.uint8)
 
 def delete_red(arr_img):
     """
@@ -191,7 +241,7 @@ def procesar_imagenes():
         if alto > ancho:
             img = img.rotate(-90, resample=Image.Resampling.BICUBIC, expand=True)
         
-        img_base = img.resize((ANCHO_DESEADO, ALTO_DESEADO), Image.Resampling.BICUBIC)
+        img_base = img
         
         img_base.save(os.path.join(CARPETA_AUMENTADA, f"{i}_base.jpg"))
 
@@ -199,12 +249,9 @@ def procesar_imagenes():
         arr_base = np.array(img_base)
 
         # * 0. Grises
-        img_gray = img_base.convert("L")
+        img_gray = convertir_a_grises_math(arr_base)
+        img_gray = Image.fromarray(img_gray)
         img_gray.save(os.path.join(CARPETA_AUMENTADA, f"{i}_gray.jpg"))
-
-        # A. Flip Horizontal
-        img_flip = img_base.transpose(Image.FLIP_LEFT_RIGHT)
-        img_flip.save(os.path.join(CARPETA_AUMENTADA, f"{i}_flip.jpg"))
 
         # B. Desenfoque
         arr_blur = aplicar_convolucion_matematica(arr_base, KERNEL_DESENFOQUE)
@@ -259,15 +306,14 @@ def procesar_imagenes():
         # * I. Personalizada
         arr_personalizada = aplicar_convolucion_matematica(arr_base, KERNEL_GAUSS)
         arr_personalizada = aplicar_convolucion_matematica(arr_base, KERNEL_NORTE)
-        img_personalizada = Image.fromarray(arr_personalizada).convert("L")
+        arr_personalizada = convertir_a_grises_math(arr_personalizada)
         img_personalizada = Image.fromarray(arr_personalizada.astype(np.uint8))
         img_personalizada.save(os.path.join(CARPETA_AUMENTADA, f"{i}_personalizada.jpg"))
 
         # * J. Personalizada 2
         arr_personalizada_2 = aplicar_convolucion_matematica(arr_base, KERNEL_DESENFOQUE)
-        img_personalizada_2 = Image.fromarray(arr_personalizada_2.astype(np.uint8)).convert("L")
-        arr_personalizada_2 = np.array(img_personalizada_2)
-        arr_personalizada_2 = _filtro_mediana(arr_personalizada_2, tamano_ventana=3)
+        arr_personalizada_2 = convertir_a_grises_math(arr_personalizada_2)
+        arr_personalizada_2 = _filtro_mediana_manual(arr_personalizada_2, tamano_ventana=3)
         arr_personalizada_2 = aplicar_convolucion_matematica(arr_personalizada_2, KERNEL_DETECCION_BORDES)
         arr_personalizada_2 = (arr_personalizada_2 > 8) * 255
         img_personalizada_2 = Image.fromarray(arr_personalizada_2.astype(np.uint8))

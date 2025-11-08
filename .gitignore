@@ -1,0 +1,7 @@
+dist/
+Originales/
+Dataset/
+build/
+vscode/
+__pycache__/
+*.pyc
